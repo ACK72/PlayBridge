@@ -1,28 +1,27 @@
 #![allow(non_snake_case)]
-use std::{env, io::*, time::Duration};
-use image::{codecs::png::PngEncoder, DynamicImage};
-use screenshots::Screen;
+use std::{env, mem, io::*, time::Duration};
+use image::{DynamicImage, RgbaImage, codecs::png::PngEncoder, imageops::FilterType};
 use windows::{
-    core::*, Win32::Foundation::*, Win32::UI::WindowsAndMessaging::*
+	core::*, Win32::{Foundation::*, Graphics::Gdi::*, Storage::Xps::*, UI::WindowsAndMessaging::*}
 };
+
+const TITLE: PCWSTR = w!("명일방주");
+const WIDTH: f32 = 1280.0;
+const HEIGHT: f32 = 720.0;
+const POLL: i32 = 1000 / 250;
 
 fn main() {
 	let args: Vec<String> = env::args().collect();
 	let command = args.join(" ");
 
 	if command.contains("connect") {
-		let mut stdout = stdout().lock();
-		stdout.write_all(b"connected to Google Play Games").unwrap();
-	}
-
-	if command.contains("shell input tap") {
+		println!("connected to Google Play Games");
+	} else if command.contains("shell input tap") {
 		let x = args[6].parse::<i32>().unwrap();
 		let y = args[7].parse::<i32>().unwrap();
 
 		input_tap(x, y);
-	}
-
-	if command.contains("shell input swipe") {
+	} else if command.contains("shell input swipe") {
 		let x1 = args[6].parse::<i32>().unwrap();
 		let y1 = args[7].parse::<i32>().unwrap();
 		let x2 = args[8].parse::<i32>().unwrap();
@@ -30,20 +29,12 @@ fn main() {
 		let dur = args[10].parse::<i32>().unwrap();
 
 		input_swipe(x1, y1, x2, y2, dur);
-	}
-
-	if command.contains("shell input keyevent 111") {
+	} else if command.contains("shell input keyevent 111") {
 		input_keyevent(0x01);
-	}
-
-	if command.contains("shell dumpsys window displays") {
-		let (x, y) = get_screen_size();
-
-		let mut stdout = stdout().lock();
-		stdout.write_all(format!("{x}\n{y}").as_bytes()).unwrap();
-	}
-
-	if command.contains("exec-out screencap -p") {
+	} else if command.contains("shell dumpsys window displays") {
+		println!("{}", WIDTH as i32);
+		println!("{}", HEIGHT as i32);
+	} else if command.contains("exec-out screencap -p") {
 		let image = get_screen_capture();
 
 		let mut stdout = stdout().lock();
@@ -51,18 +42,28 @@ fn main() {
 	}
 }
 
-fn get_screen_size() -> (i32, i32) {
-	let hwnd = unsafe { FindWindowW(PCWSTR::null(), w!("명일방주")) };
-	let mut rect = RECT::default();
-	let _ = unsafe { GetWindowRect(hwnd, &mut rect) };
+fn get_gpg_info() -> (HWND, i32, i32) {
+	let hwnd = unsafe { FindWindowW(PCWSTR::null(), TITLE) };
 
-	(rect.right - rect.left, rect.bottom - rect.top)
+	let mut client_rect = RECT::default();
+	let _ = unsafe { GetClientRect(hwnd, &mut client_rect) };
+
+	let width = client_rect.right - client_rect.left;
+	let height = client_rect.bottom - client_rect.top;
+
+	(hwnd, width, height)
+}
+
+fn get_relative_point(x: i32, y: i32, w: i32, h: i32) -> isize {
+	let nx = (x as f32 / WIDTH * w as f32) as isize;
+	let ny = (y as f32 / HEIGHT * h as f32) as isize;
+
+	ny << 16 | nx
 }
 
 fn input_tap(x: i32, y: i32) {
-	let hwnd = unsafe { FindWindowW(PCWSTR::null(), w!("명일방주")) };
-
-	let pos = (y << 16 | x) as isize;
+	let (hwnd, w, h) = get_gpg_info();
+	let pos = get_relative_point(x, y, w, h);
 
 	unsafe {
 		let _ = SendMessageA(hwnd, WM_LBUTTONDOWN, WPARAM(1), LPARAM(pos));
@@ -71,35 +72,38 @@ fn input_tap(x: i32, y: i32) {
 }
 
 fn input_swipe(x1: i32, y1: i32, x2: i32, y2: i32, dur: i32) {
-	let hwnd = unsafe { FindWindowW(PCWSTR::null(), w!("명일방주")) };
+	let (hwnd, w, h) = get_gpg_info();
 
-	let polling = 1000 / 250;
-	let times = dur as f32 / polling as f32;
+	let time = dur as f32 / POLL as f32;
+	let ends = time.floor() as i32;
 
-	let dx = ((x2 - x1) as f32) / times;
-	let dy = ((y2 - y1) as f32) / times;
+	let dx = ((x2 - x1) as f32) / time;
+	let dy = ((y2 - y1) as f32) / time;
 
 	unsafe {
-		let mut count = 0f32;
+		let mut cnt = 0;
 		loop {
-			if count >= times {
+			if cnt >= ends {
 				break;
 			}
 
-			let pos = ((y1 + (dy * count as f32) as i32) << 16 | (x1 + (dx * count as f32) as i32)) as isize;
+			let nx = x1 + (dx * cnt as f32) as i32;
+			let ny = y1 + (dy * cnt as f32) as i32;
+			let pos = get_relative_point(nx, ny, w, h);
+
 			let _ = SendMessageA(hwnd, WM_LBUTTONDOWN, WPARAM(1), LPARAM(pos));
 			
-			spin_sleep::sleep(Duration::new(0, polling * 1000000));
-			count += 1.0;
+			spin_sleep::sleep(Duration::new(0, POLL as u32 * 1000000));
+			cnt += 1;
 		}
 
-		let pos = (y2 << 16 | x2) as isize;
+		let pos = get_relative_point(x2, y2, w, h);
 		let _ = SendMessageA(hwnd, WM_LBUTTONUP, WPARAM(1), LPARAM(pos));
 	}
 }
 
 fn input_keyevent(keycode: i32) {
-	let hwnd = unsafe { FindWindowW(PCWSTR::null(), w!("명일방주")) };
+	let hwnd = unsafe { FindWindowW(PCWSTR::null(), TITLE) };
 
 	let wparam = WPARAM(keycode as usize);
 	let down = LPARAM((keycode << 16) as isize);
@@ -112,13 +116,58 @@ fn input_keyevent(keycode: i32) {
 }
 
 fn get_screen_capture() -> DynamicImage {
-	let hwnd = unsafe { FindWindowW(PCWSTR::null(), w!("명일방주")) };
-	
+	let main = unsafe { FindWindowW(PCWSTR::null(), TITLE) };
+	let hwnd = unsafe { FindWindowExA(main, HWND(0), s!("subWin"), PCSTR::null()) };
+
 	let mut rect = RECT::default();
 	let _ = unsafe { GetWindowRect(hwnd, &mut rect) };
-	
-	let screen = Screen::from_point((rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2).unwrap();
-	let capture = screen.capture().unwrap();
 
-	image::DynamicImage::ImageRgba8(capture)
+	let width = rect.right - rect.left;
+	let height = rect.bottom - rect.top;
+	
+	let mut binfo = BITMAPINFO {
+		bmiHeader: BITMAPINFOHEADER {
+			biSize: mem::size_of::<BITMAPINFOHEADER>() as u32,
+			biWidth: width,
+			biHeight: height,
+			biPlanes: 1,
+			biBitCount: 32,
+			biCompression: 0,
+			biSizeImage: 0,
+			biXPelsPerMeter: 0,
+			biYPelsPerMeter: 0,
+			biClrUsed: 0,
+			biClrImportant: 0,
+		},
+		bmiColors: [RGBQUAD::default(); 1],
+	};
+
+	let mut buffer = vec![0u8; (width * height) as usize * 4];
+	let mut bitmap = BITMAP::default();
+	let bitmap_ptr = <*mut _>::cast(&mut bitmap);
+
+	unsafe {
+		let dc = GetDC(main);
+		let cdc = CreateCompatibleDC(dc);
+		let cbmp = CreateCompatibleBitmap(dc, width, height);
+
+		SelectObject(cdc, cbmp);
+		PrintWindow(main, cdc, PW_CLIENTONLY);
+
+		GetDIBits(cdc, cbmp, 0, height as u32, Some(buffer.as_mut_ptr() as *mut _), &mut binfo, DIB_RGB_COLORS);
+		GetObjectW(cbmp, mem::size_of::<BITMAP>() as i32, Some(bitmap_ptr));
+
+		DeleteDC(dc);
+		DeleteDC(cdc);
+		ReleaseDC(main, dc);
+	}
+
+	let mut chunks: Vec<Vec<u8>> = buffer.chunks(width as usize * 4).map(|x| x.to_vec()).collect();
+	chunks.reverse();
+
+	let rgba = chunks.concat().chunks_exact(4).take((bitmap.bmWidth * bitmap.bmHeight) as usize).flat_map(|bgra| [bgra[2], bgra[1], bgra[0], bgra[3]]).collect();
+	let image = RgbaImage::from_vec(bitmap.bmWidth as u32, bitmap.bmHeight as u32, rgba).unwrap();
+	let native = image::DynamicImage::ImageRgba8(image);
+	
+	native.resize(1280, 720, FilterType::CatmullRom)
 }
