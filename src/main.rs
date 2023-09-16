@@ -16,12 +16,12 @@ fn main() {
 
 	if command.contains("connect") {
 		println!("connected to Google Play Games");
-	} else if command.contains("shell input tap") {
+	} else if command.contains("input tap") {
 		let x = args[6].parse::<i32>().unwrap();
 		let y = args[7].parse::<i32>().unwrap();
 
 		input_tap(x, y);
-	} else if command.contains("shell input swipe") {
+	} else if command.contains("input swipe") {
 		let x1 = args[6].parse::<i32>().unwrap();
 		let y1 = args[7].parse::<i32>().unwrap();
 		let x2 = args[8].parse::<i32>().unwrap();
@@ -29,16 +29,18 @@ fn main() {
 		let dur = args[10].parse::<i32>().unwrap();
 
 		input_swipe(x1, y1, x2, y2, dur);
-	} else if command.contains("shell input keyevent 111") {
+	} else if command.contains("input keyevent 111") {
 		input_keyevent(0x01);
-	} else if command.contains("shell dumpsys window displays") {
+	} else if command.contains("dumpsys window displays") {
 		println!("{}", WIDTH as i32);
 		println!("{}", HEIGHT as i32);
 	} else if command.contains("exec-out screencap -p") {
-		let image = get_screen_capture();
+		let image = capture();
 
 		let mut stdout = stdout().lock();
 		image.write_with_encoder(PngEncoder::new(&mut stdout)).unwrap();
+	} else if command.contains("am force-stop") {
+		terminate();
 	}
 }
 
@@ -115,7 +117,7 @@ fn input_keyevent(keycode: i32) {
 	}
 }
 
-fn get_screen_capture() -> DynamicImage {
+fn capture() -> DynamicImage {
 	let main = unsafe { FindWindowW(PCWSTR::null(), TITLE) };
 	let hwnd = unsafe { FindWindowExA(main, HWND(0), s!("subWin"), PCSTR::null()) };
 
@@ -169,5 +171,10 @@ fn get_screen_capture() -> DynamicImage {
 	let image = RgbaImage::from_vec(bitmap.bmWidth as u32, bitmap.bmHeight as u32, rgba).unwrap();
 	let native = image::DynamicImage::ImageRgba8(image);
 	
-	native.resize(1280, 720, FilterType::CatmullRom)
+	native.resize(WIDTH as u32, HEIGHT as u32, FilterType::CatmullRom)
+}
+
+fn terminate() {
+	let hwnd = unsafe { FindWindowW(PCWSTR::null(), TITLE) };
+	let _ = unsafe { PostMessageA(hwnd, WM_CLOSE, WPARAM(0), LPARAM(0)) };
 }
