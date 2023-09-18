@@ -2,7 +2,7 @@
 use std::{env, mem, io::*, time::Duration};
 use image::{DynamicImage, RgbaImage, codecs::png::PngEncoder, imageops::FilterType};
 use windows::{
-	core::*, Win32::{Foundation::*, Graphics::Gdi::*, Storage::Xps::*, UI::WindowsAndMessaging::*}
+	core::*, Win32::{Foundation::*, Graphics::Gdi::*, Storage::Xps::*, UI::HiDpi::*, UI::WindowsAndMessaging::*}
 };
 
 const TITLE: PCWSTR = w!("명일방주");
@@ -11,6 +11,8 @@ const HEIGHT: f32 = 720.0;
 const POLL: i32 = 1000 / 250;
 
 fn main() {
+	unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2).unwrap() };
+
 	let args: Vec<String> = env::args().collect();
 	let command = args.join(" ");
 
@@ -118,15 +120,14 @@ fn input_keyevent(keycode: i32) {
 }
 
 fn capture() -> DynamicImage {
-	let (main, w, h) = get_gpg_info();
+	let main = unsafe { FindWindowW(PCWSTR::null(), TITLE) };
+	let hwnd = unsafe { FindWindowExA(main, HWND(0), s!("subWin"), PCSTR::null()) };
 	
-	let hdc = unsafe { GetDC(HWND(0)) };
-	let logical_height = unsafe { GetDeviceCaps( hdc, VERTRES) };
-	let physical_height = unsafe { GetDeviceCaps( hdc, DESKTOPVERTRES) };
-	let dpi = physical_height as f32 / logical_height as f32;
+	let mut rect = RECT::default();
+	let _ = unsafe { GetWindowRect(hwnd, &mut rect) };
 
-	let width = (w as f32 * dpi).ceil() as i32;
-	let height = (h as f32 * dpi).ceil() as i32;
+	let width = rect.right - rect.left;
+	let height = rect.bottom - rect.top;
 
 	let mut binfo = BITMAPINFO {
 		bmiHeader: BITMAPINFOHEADER {
