@@ -57,8 +57,8 @@ fn get_gpg_info() -> (HWND, i32, i32) {
 }
 
 fn get_relative_point(x: i32, y: i32, w: i32, h: i32) -> isize {
-	let nx = (x as f32 / WIDTH * w as f32) as isize;
-	let ny = (y as f32 / HEIGHT * h as f32) as isize;
+	let nx = (x as f32 / WIDTH * w as f32).ceil() as isize;
+	let ny = (y as f32 / HEIGHT * h as f32).ceil() as isize;
 
 	ny << 16 | nx
 }
@@ -118,15 +118,16 @@ fn input_keyevent(keycode: i32) {
 }
 
 fn capture() -> DynamicImage {
-	let main = unsafe { FindWindowW(PCWSTR::null(), TITLE) };
-	let hwnd = unsafe { FindWindowExA(main, HWND(0), s!("subWin"), PCSTR::null()) };
-
-	let mut rect = RECT::default();
-	let _ = unsafe { GetWindowRect(hwnd, &mut rect) };
-
-	let width = rect.right - rect.left;
-	let height = rect.bottom - rect.top;
+	let (main, w, h) = get_gpg_info();
 	
+	let hdc = unsafe { GetDC(HWND(0)) };
+	let logical_height = unsafe { GetDeviceCaps( hdc, VERTRES) };
+	let physical_height = unsafe { GetDeviceCaps( hdc, DESKTOPVERTRES) };
+	let dpi = physical_height as f32 / logical_height as f32;
+
+	let width = (w as f32 * dpi).ceil() as i32;
+	let height = (h as f32 * dpi).ceil() as i32;
+
 	let mut binfo = BITMAPINFO {
 		bmiHeader: BITMAPINFOHEADER {
 			biSize: mem::size_of::<BITMAPINFOHEADER>() as u32,
@@ -167,8 +168,8 @@ fn capture() -> DynamicImage {
 	let mut chunks: Vec<Vec<u8>> = buffer.chunks(width as usize * 4).map(|x| x.to_vec()).collect();
 	chunks.reverse();
 
-	let rgba = chunks.concat().chunks_exact(4).take((bitmap.bmWidth * bitmap.bmHeight) as usize).flat_map(|bgra| [bgra[2], bgra[1], bgra[0], bgra[3]]).collect();
-	let image = RgbaImage::from_vec(bitmap.bmWidth as u32, bitmap.bmHeight as u32, rgba).unwrap();
+	let rgba = chunks.concat().chunks_exact(4).take((width * height) as usize).flat_map(|bgra| [bgra[2], bgra[1], bgra[0], bgra[3]]).collect();
+	let image = RgbaImage::from_vec(width as u32, height as u32, rgba).unwrap();
 	let native = image::DynamicImage::ImageRgba8(image);
 	
 	native.resize(WIDTH as u32, HEIGHT as u32, FilterType::CatmullRom)
