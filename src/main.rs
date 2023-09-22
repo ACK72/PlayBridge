@@ -17,7 +17,7 @@ fn main() {
 	let command = args.join(" ");
 
 	if command.contains("connect") {
-		println!("connected to Google Play Games");
+		println!("connected to Arknights");
 	} else if command.contains("input tap") {
 		let x = args[6].parse::<i32>().unwrap();
 		let y = args[7].parse::<i32>().unwrap();
@@ -70,8 +70,8 @@ fn input_tap(x: i32, y: i32) {
 	let pos = get_relative_point(x, y, w, h);
 
 	unsafe {
-		let _ = SendMessageA(hwnd, WM_LBUTTONDOWN, WPARAM(1), LPARAM(pos));
-		let _ = SendMessageA(hwnd, WM_LBUTTONUP, WPARAM(1), LPARAM(pos));
+		let _ = PostMessageA(hwnd, WM_LBUTTONDOWN, WPARAM(1), LPARAM(pos));
+		let _ = PostMessageA(hwnd, WM_LBUTTONUP, WPARAM(1), LPARAM(pos));
 	}
 }
 
@@ -95,14 +95,14 @@ fn input_swipe(x1: i32, y1: i32, x2: i32, y2: i32, dur: i32) {
 			let ny = y1 + (dy * cnt as f32) as i32;
 			let pos = get_relative_point(nx, ny, w, h);
 
-			let _ = SendMessageA(hwnd, WM_LBUTTONDOWN, WPARAM(1), LPARAM(pos));
+			let _ = PostMessageA(hwnd, WM_LBUTTONDOWN, WPARAM(1), LPARAM(pos));
 			
 			spin_sleep::sleep(Duration::new(0, POLL as u32 * 1000000));
 			cnt += 1;
 		}
 
 		let pos = get_relative_point(x2, y2, w, h);
-		let _ = SendMessageA(hwnd, WM_LBUTTONUP, WPARAM(1), LPARAM(pos));
+		let _ = PostMessageA(hwnd, WM_LBUTTONUP, WPARAM(1), LPARAM(pos));
 	}
 }
 
@@ -114,8 +114,8 @@ fn input_keyevent(keycode: i32) {
 	let up = LPARAM((keycode << 16 | 1 << 30 | 1 << 31) as isize);
 
 	unsafe {
-		let _ = SendMessageA(hwnd, WM_KEYDOWN, wparam, down);
-		let _ = SendMessageA(hwnd, WM_KEYUP, wparam, up);
+		let _ = PostMessageA(hwnd, WM_KEYDOWN, wparam, down);
+		let _ = PostMessageA(hwnd, WM_KEYUP, wparam, up);
 	}
 }
 
@@ -129,7 +129,8 @@ fn capture() -> DynamicImage {
 	let width = rect.right - rect.left;
 	let height = rect.bottom - rect.top;
 
-	let mut binfo = BITMAPINFO {
+	let mut buffer = vec![0u8; (width * height) as usize * 4];
+	let mut info = BITMAPINFO {
 		bmiHeader: BITMAPINFOHEADER {
 			biSize: mem::size_of::<BITMAPINFOHEADER>() as u32,
 			biWidth: width,
@@ -146,24 +147,19 @@ fn capture() -> DynamicImage {
 		bmiColors: [RGBQUAD::default(); 1],
 	};
 
-	let mut buffer = vec![0u8; (width * height) as usize * 4];
-	let mut bitmap = BITMAP::default();
-	let bitmap_ptr = <*mut _>::cast(&mut bitmap);
-
 	unsafe {
 		let dc = GetDC(main);
 		let cdc = CreateCompatibleDC(dc);
 		let cbmp = CreateCompatibleBitmap(dc, width, height);
 
 		SelectObject(cdc, cbmp);
-		PrintWindow(main, cdc, PW_CLIENTONLY);
-
-		GetDIBits(cdc, cbmp, 0, height as u32, Some(buffer.as_mut_ptr() as *mut _), &mut binfo, DIB_RGB_COLORS);
-		GetObjectW(cbmp, mem::size_of::<BITMAP>() as i32, Some(bitmap_ptr));
-
+		PrintWindow(main, cdc, PRINT_WINDOW_FLAGS(PW_CLIENTONLY.0 | PW_RENDERFULLCONTENT));
+		GetDIBits(cdc, cbmp, 0, height as u32, Some(buffer.as_mut_ptr() as *mut _), &mut info, DIB_RGB_COLORS);
+		
+		DeleteObject(cbmp);
+		ReleaseDC(main, dc);
 		DeleteDC(dc);
 		DeleteDC(cdc);
-		ReleaseDC(main, dc);
 	}
 
 	let mut chunks: Vec<Vec<u8>> = buffer.chunks(width as usize * 4).map(|x| x.to_vec()).collect();
