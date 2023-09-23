@@ -169,7 +169,7 @@ fn capture() -> DynamicImage {
 	let image = RgbaImage::from_vec(width as u32, height as u32, rgba).unwrap();
 	let native = image::DynamicImage::ImageRgba8(image);
 	
-	native.resize(WIDTH as u32, HEIGHT as u32, FilterType::CatmullRom)
+	native.resize_exact(WIDTH as u32, HEIGHT as u32, FilterType::Lanczos3)
 }
 
 fn terminate() {
