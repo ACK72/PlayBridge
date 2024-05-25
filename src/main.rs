@@ -43,6 +43,8 @@ fn main() {
 		image.write_with_encoder(PngEncoder::new(&mut stdout)).unwrap();
 	} else if command.contains("am force-stop") {
 		terminate();
+	} else if command.contains("shell getprop ro.build.version.release") {
+		println!("14") // Dummy
 	}
 }
 
@@ -153,13 +155,13 @@ fn capture() -> DynamicImage {
 		let cbmp = CreateCompatibleBitmap(dc, width, height);
 
 		SelectObject(cdc, cbmp);
-		PrintWindow(main, cdc, PRINT_WINDOW_FLAGS(PW_CLIENTONLY.0 | PW_RENDERFULLCONTENT));
+		let _ = PrintWindow(main, cdc, PRINT_WINDOW_FLAGS(PW_CLIENTONLY.0 | PW_RENDERFULLCONTENT));
 		GetDIBits(cdc, cbmp, 0, height as u32, Some(buffer.as_mut_ptr() as *mut _), &mut info, DIB_RGB_COLORS);
 		
-		DeleteObject(cbmp);
+		_ = DeleteObject(cbmp);
 		ReleaseDC(main, dc);
-		DeleteDC(dc);
-		DeleteDC(cdc);
+		_ = DeleteDC(dc);
+		_ = DeleteDC(cdc);
 	}
 
 	let mut chunks: Vec<Vec<u8>> = buffer.chunks(width as usize * 4).map(|x| x.to_vec()).collect();
