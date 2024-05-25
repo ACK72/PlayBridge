@@ -52,7 +52,7 @@ fn get_gpg_info() -> (HWND, i32, i32) {
 	let hwnd = unsafe { FindWindowW(PCWSTR::null(), TITLE) };
 
 	let mut client_rect = RECT::default();
-	let _ = unsafe { GetClientRect(hwnd, &mut client_rect) };
+	_ = unsafe { GetClientRect(hwnd, &mut client_rect) };
 
 	let width = client_rect.right - client_rect.left;
 	let height = client_rect.bottom - client_rect.top;
@@ -72,8 +72,8 @@ fn input_tap(x: i32, y: i32) {
 	let pos = get_relative_point(x, y, w, h);
 
 	unsafe {
-		let _ = PostMessageA(hwnd, WM_LBUTTONDOWN, WPARAM(1), LPARAM(pos));
-		let _ = PostMessageA(hwnd, WM_LBUTTONUP, WPARAM(1), LPARAM(pos));
+		_ = PostMessageA(hwnd, WM_LBUTTONDOWN, WPARAM(1), LPARAM(pos));
+		_ = PostMessageA(hwnd, WM_LBUTTONUP, WPARAM(1), LPARAM(pos));
 	}
 }
 
@@ -97,14 +97,14 @@ fn input_swipe(x1: i32, y1: i32, x2: i32, y2: i32, dur: i32) {
 			let ny = y1 + (dy * cnt as f32) as i32;
 			let pos = get_relative_point(nx, ny, w, h);
 
-			let _ = PostMessageA(hwnd, WM_LBUTTONDOWN, WPARAM(1), LPARAM(pos));
+			_ = PostMessageA(hwnd, WM_LBUTTONDOWN, WPARAM(1), LPARAM(pos));
 			
 			spin_sleep::sleep(Duration::new(0, POLL as u32 * 1000000));
 			cnt += 1;
 		}
 
 		let pos = get_relative_point(x2, y2, w, h);
-		let _ = PostMessageA(hwnd, WM_LBUTTONUP, WPARAM(1), LPARAM(pos));
+		_ = PostMessageA(hwnd, WM_LBUTTONUP, WPARAM(1), LPARAM(pos));
 	}
 }
 
@@ -116,8 +116,8 @@ fn input_keyevent(keycode: i32) {
 	let up = LPARAM((keycode << 16 | 1 << 30 | 1 << 31) as isize);
 
 	unsafe {
-		let _ = PostMessageA(hwnd, WM_KEYDOWN, wparam, down);
-		let _ = PostMessageA(hwnd, WM_KEYUP, wparam, up);
+		_ = PostMessageA(hwnd, WM_KEYDOWN, wparam, down);
+		_ = PostMessageA(hwnd, WM_KEYUP, wparam, up);
 	}
 }
 
@@ -126,7 +126,7 @@ fn capture() -> DynamicImage {
 	let hwnd = unsafe { FindWindowExA(main, HWND(0), s!("subWin"), PCSTR::null()) };
 	
 	let mut rect = RECT::default();
-	let _ = unsafe { GetWindowRect(hwnd, &mut rect) };
+	_ = unsafe { GetWindowRect(hwnd, &mut rect) };
 
 	let width = rect.right - rect.left;
 	let height = rect.bottom - rect.top;
@@ -155,7 +155,7 @@ fn capture() -> DynamicImage {
 		let cbmp = CreateCompatibleBitmap(dc, width, height);
 
 		SelectObject(cdc, cbmp);
-		let _ = PrintWindow(main, cdc, PRINT_WINDOW_FLAGS(PW_CLIENTONLY.0 | PW_RENDERFULLCONTENT));
+		_ = PrintWindow(main, cdc, PRINT_WINDOW_FLAGS(PW_CLIENTONLY.0 | PW_RENDERFULLCONTENT));
 		GetDIBits(cdc, cbmp, 0, height as u32, Some(buffer.as_mut_ptr() as *mut _), &mut info, DIB_RGB_COLORS);
 		
 		_ = DeleteObject(cbmp);
@@ -176,5 +176,5 @@ fn capture() -> DynamicImage {
 
 fn terminate() {
 	let hwnd = unsafe { FindWindowW(PCWSTR::null(), TITLE) };
-	let _ = unsafe { PostMessageA(hwnd, WM_CLOSE, WPARAM(0), LPARAM(0)) };
+	_ = unsafe { PostMessageA(hwnd, WM_CLOSE, WPARAM(0), LPARAM(0)) };
 }
