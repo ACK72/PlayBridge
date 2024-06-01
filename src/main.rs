@@ -45,6 +45,11 @@ fn main() {
 		terminate();
 	} else if command.contains("shell getprop ro.build.version.release") {
 		println!("14") // Dummy
+	} else if command.contains("shell am start -n") {
+		// command to startup game
+		let intent = args[7].parse::<String>().unwrap();
+		println!("Starting: Intent {{ cmp={} }}", intent);
+		println!("Warning: Activity not started, intent has been delivered to currently running top-most instance.");
 	}
 }
 
