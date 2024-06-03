@@ -5,7 +5,8 @@ use windows::{
 	core::*, Win32::{Foundation::*, Graphics::Gdi::*, Storage::Xps::*, UI::HiDpi::*, UI::WindowsAndMessaging::*}
 };
 
-const TITLE: PCWSTR = w!("명일방주");
+const TITLE: PCWSTR = w!("명일방주"); // Note: Rename the title you want to interact with.
+const CLASS: PCWSTR = w!("CROSVM_1"); // Note: Warning. May cause problems in the future.
 const WIDTH: f32 = 1280.0;
 const HEIGHT: f32 = 720.0;
 const POLL: i32 = 1000 / 250;
@@ -17,7 +18,19 @@ fn main() {
 	let command = args.join(" ");
 
 	if command.contains("connect") {
-		println!("connected to Arknights");
+		println!("connected to Google Play Games Beta");
+	} else if command.contains("shell getprop ro.build.version.release") {
+		println!("14")
+	} else if command.contains("shell am start -n") {
+		let intent = args[7].parse::<String>().unwrap();
+		let package = intent.split("/").next().unwrap();
+
+		if unsafe { FindWindowW(CLASS, TITLE) } == HWND(0) {
+			_ = open::that(format!("googleplaygames://launch/?id={}", package));
+		}
+		
+		println!("Starting: Intent {{ cmp={} }}", intent);
+		println!("Warning: Activity not started, intent has been delivered to currently running top-most instance."); // Note: As PlayBridge does not call the intent directly, it needs to print warning.
 	} else if command.contains("input tap") {
 		let x = args[6].parse::<i32>().unwrap();
 		let y = args[7].parse::<i32>().unwrap();
@@ -43,26 +56,16 @@ fn main() {
 		image.write_with_encoder(PngEncoder::new(&mut stdout)).unwrap();
 	} else if command.contains("am force-stop") {
 		terminate();
-	} else if command.contains("shell getprop ro.build.version.release") {
-		println!("14") // Dummy
-	} else if command.contains("shell am start -n") {
-		// command to startup game
-		let intent = args[7].parse::<String>().unwrap();
-		println!("Starting: Intent {{ cmp={} }}", intent);
-		println!("Warning: Activity not started, intent has been delivered to currently running top-most instance.");
 	}
 }
 
 fn get_gpg_info() -> (HWND, i32, i32) {
-	let hwnd = unsafe { FindWindowW(PCWSTR::null(), TITLE) };
+	let hwnd = unsafe { FindWindowW(CLASS, TITLE) };
 
 	let mut client_rect = RECT::default();
 	_ = unsafe { GetClientRect(hwnd, &mut client_rect) };
-
-	let width = client_rect.right - client_rect.left;
-	let height = client_rect.bottom - client_rect.top;
-
-	(hwnd, width, height)
+	
+	(hwnd, (client_rect.right - client_rect.left) as i32, (client_rect.bottom - client_rect.top) as i32)
 }
 
 fn get_relative_point(x: i32, y: i32, w: i32, h: i32) -> isize {
@@ -114,7 +117,7 @@ fn input_swipe(x1: i32, y1: i32, x2: i32, y2: i32, dur: i32) {
 }
 
 fn input_keyevent(keycode: i32) {
-	let hwnd = unsafe { FindWindowW(PCWSTR::null(), TITLE) };
+	let hwnd = unsafe { FindWindowW(CLASS, TITLE) };
 
 	let wparam = WPARAM(keycode as usize);
 	let down = LPARAM((keycode << 16) as isize);
@@ -127,11 +130,11 @@ fn input_keyevent(keycode: i32) {
 }
 
 fn capture() -> DynamicImage {
-	let main = unsafe { FindWindowW(PCWSTR::null(), TITLE) };
-	let hwnd = unsafe { FindWindowExA(main, HWND(0), s!("subWin"), PCSTR::null()) };
+	let hwnd = unsafe { FindWindowW(CLASS, TITLE) };
+	let swnd = unsafe { FindWindowExA(hwnd, HWND(0), s!("subWin"), PCSTR::null()) };
 	
 	let mut rect = RECT::default();
-	_ = unsafe { GetWindowRect(hwnd, &mut rect) };
+	_ = unsafe { GetWindowRect(swnd, &mut rect) };
 
 	let width = rect.right - rect.left;
 	let height = rect.bottom - rect.top;
@@ -155,16 +158,16 @@ fn capture() -> DynamicImage {
 	};
 
 	unsafe {
-		let dc = GetDC(main);
+		let dc = GetDC(hwnd);
 		let cdc = CreateCompatibleDC(dc);
 		let cbmp = CreateCompatibleBitmap(dc, width, height);
 
 		SelectObject(cdc, cbmp);
-		_ = PrintWindow(main, cdc, PRINT_WINDOW_FLAGS(PW_CLIENTONLY.0 | PW_RENDERFULLCONTENT));
+		_ = PrintWindow(hwnd, cdc, PRINT_WINDOW_FLAGS(PW_CLIENTONLY.0 | PW_RENDERFULLCONTENT));
 		GetDIBits(cdc, cbmp, 0, height as u32, Some(buffer.as_mut_ptr() as *mut _), &mut info, DIB_RGB_COLORS);
 		
 		_ = DeleteObject(cbmp);
-		ReleaseDC(main, dc);
+		ReleaseDC(hwnd, dc);
 		_ = DeleteDC(dc);
 		_ = DeleteDC(cdc);
 	}
@@ -180,6 +183,6 @@ fn capture() -> DynamicImage {
 }
 
 fn terminate() {
-	let hwnd = unsafe { FindWindowW(PCWSTR::null(), TITLE) };
+	let hwnd = unsafe { FindWindowW(CLASS, TITLE) };
 	_ = unsafe { PostMessageA(hwnd, WM_CLOSE, WPARAM(0), LPARAM(0)) };
 }
