@@ -14,5 +14,5 @@ Simple ADB emulator for Google Play Games, especially for Arknights & MAA
 ## Limitations
 
 - The deployed build files are targeting Korean servers and windows. (Modify the TITLE constant in the source file with the name of the window you want to apply)
-- Of the special keys, only ESC supports current input. This may be updated in the future.
-- (Arknights & MAA only) All features are currently working, but due to differences in in-game graphics between Android and Google Play Games Beta, MAA may not work smoothly.
+- Of the special keys, currently, only ESC key input supported. This may be updated in the future.
+- (Arknights & MAA only) All features are currently working, but due to differences in in-game graphics between Android and Google Play Games Beta, MAA may not work smoothly in certain situations.
