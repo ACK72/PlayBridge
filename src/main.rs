@@ -19,6 +19,11 @@ fn main() {
 
 	if command.contains("connect") {
 		println!("connected to Google Play Games Beta");
+	} else if command.contains("devices") {
+		println!("List of devices attached");
+		if unsafe { FindWindowW(CLASS, TITLE) } != HWND(0) {
+			println!("GooglePlayGamesBeta\tdevice")
+		}
 	} else if command.contains("shell getprop ro.build.version.release") {
 		println!("14")
 	} else if command.contains("shell am start -n") {
