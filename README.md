@@ -16,7 +16,8 @@ Simple ADB emulator for Google Play Games, especially for Arknights & MAA
 set PLAYBRIDGE_TITLE=명일방주
 set PLAYBRIDGE_QUICK=1
 set PLAYBRIDGE_DEBUG=1
-MAA.exe
+start MAA.exe
+exit
 ```
 
 - Change PLAYBRIDGE_TITLE with the title you are running. For example, set it to Arknights for YOSTAR_EN. (You can also use it for other games.)
