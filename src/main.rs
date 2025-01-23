@@ -57,7 +57,7 @@ fn main() {
 		input_swipe(x1, y1, x2, y2, dur);
 	} else if command.contains("input keyevent 111") {
 		input_keyevent(0x01);
-	} else if command.contains("dumpsys window displays") {
+	} else if command.contains("dumpsys window displays") || command.contains("wm size") {
 		println!("{}", WIDTH as i32);
 		println!("{}", HEIGHT as i32);
 	} else if command.contains("exec-out screencap -p") {
