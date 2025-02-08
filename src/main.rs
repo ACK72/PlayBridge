@@ -1,11 +1,21 @@
 #![allow(non_snake_case)]
-use std::{env, mem, io::*, time::Duration};
+use chrono::offset::Local;
+use once_cell::sync::Lazy;
+use std::{env, iter, mem, fs::OpenOptions, io::*, time::Duration};
 use image::{DynamicImage, RgbaImage, codecs::png::PngEncoder, imageops::FilterType};
 use windows::{
 	core::*, Win32::{Foundation::*, Graphics::Gdi::*, Storage::Xps::*, UI::HiDpi::*, UI::WindowsAndMessaging::*}
 };
 
-const TITLE: PCWSTR = w!("명일방주"); // Note: Rename the title you want to interact with.
+const TITLE: Lazy<PCWSTR> = Lazy::new(|| {
+	let var = env::var("PLAYBRIDGE_TITLE").unwrap_or(String::from("명일방주"));
+	let vec: Vec<u16> = var.encode_utf16().chain(iter::once(0)).collect::<Vec<_>>();
+
+	PCWSTR::from_raw(vec.as_ptr())
+});
+const QUICK: Lazy<bool> = Lazy::new(|| env::var("PLAYBRIDGE_QUICK").is_ok());
+const DEBUG: Lazy<bool> = Lazy::new(|| env::var("PLAYBRIDGE_DEBUG").is_ok());
+
 const CLASS: PCWSTR = w!("CROSVM_1"); // Note: Warning. May cause problems in the future.
 const WIDTH: f32 = 1280.0;
 const HEIGHT: f32 = 720.0;
@@ -16,6 +26,7 @@ fn main() {
 
 	let args: Vec<String> = env::args().collect();
 	let command = args.join(" ");
+	let timestamp = Local::now().format("%Y-%m-%d %H.%M.%S_%3f").to_string();
 
 	if command.contains("connect") {
 		println!("connected to Google Play Games Beta");
@@ -30,7 +41,7 @@ fn main() {
 		let intent = args[7].parse::<String>().unwrap();
 		let package = intent.split("/").next().unwrap();
 
-		if unsafe { FindWindowW(CLASS, TITLE) } == HWND(0) {
+		if unsafe { FindWindowW(CLASS, *TITLE) } == HWND(0) {
 			_ = open::that(format!("googleplaygames://launch/?id={}", package));
 		}
 		
@@ -51,7 +62,7 @@ fn main() {
 		input_swipe(x1, y1, x2, y2, dur);
 	} else if command.contains("input keyevent 111") {
 		input_keyevent(0x01);
-	} else if command.contains("dumpsys window displays") {
+	} else if command.contains("dumpsys window displays") || command.contains("wm size") {
 		println!("{}", WIDTH as i32);
 		println!("{}", HEIGHT as i32);
 	} else if command.contains("exec-out screencap -p") {
@@ -59,13 +70,27 @@ fn main() {
 
 		let mut stdout = stdout().lock();
 		image.write_with_encoder(PngEncoder::new(&mut stdout)).unwrap();
+
+		if *DEBUG {
+			let file = format!("playbridge_debug/{}.png", timestamp);
+			let path = std::path::Path::new(&file);
+			let parent = path.parent().unwrap();
+
+			std::fs::create_dir_all(parent).unwrap();
+			image.save_with_format(path, image::ImageFormat::Png).unwrap();
+		}
 	} else if command.contains("am force-stop") {
 		terminate();
+	}
+
+	if *DEBUG {
+		let mut log = OpenOptions::new().create(true).append(true).open("playbridge.log").unwrap();
+		_ = writeln!(log, "[{}] {}", timestamp, command);
 	}
 }
 
 fn get_gpg_info() -> (HWND, i32, i32) {
-	let hwnd = unsafe { FindWindowW(CLASS, TITLE) };
+	let hwnd = unsafe { FindWindowW(CLASS, *TITLE) };
 
 	let mut client_rect = RECT::default();
 	_ = unsafe { GetClientRect(hwnd, &mut client_rect) };
@@ -93,36 +118,36 @@ fn input_tap(x: i32, y: i32) {
 fn input_swipe(x1: i32, y1: i32, x2: i32, y2: i32, dur: i32) {
 	let (hwnd, w, h) = get_gpg_info();
 
-	let time = dur as f32 / POLL as f32;
-	let ends = time.floor() as i32;
+	let time = (dur as f32 / POLL as f32).floor() as i32;
+	let speed = if *QUICK { 10 } else  { 1 };
+	let index = time * (speed - 1) / speed;
 
-	let dx = ((x2 - x1) as f32) / time;
-	let dy = ((y2 - y1) as f32) / time;
+	let dx = ((x2 - x1) as f32) / time as f32;
+	let dy = ((y2 - y1) as f32) / time as f32;
 
 	unsafe {
 		let mut cnt = 0;
-		loop {
-			if cnt >= ends {
-				break;
-			}
-
+		while cnt < time {
 			let nx = x1 + (dx * cnt as f32) as i32;
 			let ny = y1 + (dy * cnt as f32) as i32;
 			let pos = get_relative_point(nx, ny, w, h);
 
 			_ = PostMessageA(hwnd, WM_LBUTTONDOWN, WPARAM(1), LPARAM(pos));
-			
-			spin_sleep::sleep(Duration::new(0, POLL as u32 * 1000000));
+
+			let wait = if cnt >= index { POLL * 1000000 } else { POLL * 1000000 / speed } as u32;
+
+			spin_sleep::sleep(Duration::new(0, wait));
 			cnt += 1;
 		}
 
 		let pos = get_relative_point(x2, y2, w, h);
+		_ = PostMessageA(hwnd, WM_LBUTTONDOWN, WPARAM(1), LPARAM(pos));
 		_ = PostMessageA(hwnd, WM_LBUTTONUP, WPARAM(1), LPARAM(pos));
 	}
 }
 
 fn input_keyevent(keycode: i32) {
-	let hwnd = unsafe { FindWindowW(CLASS, TITLE) };
+	let hwnd = unsafe { FindWindowW(CLASS, *TITLE) };
 
 	let wparam = WPARAM(keycode as usize);
 	let down = LPARAM((keycode << 16) as isize);
@@ -135,7 +160,7 @@ fn input_keyevent(keycode: i32) {
 }
 
 fn capture() -> DynamicImage {
-	let hwnd = unsafe { FindWindowW(CLASS, TITLE) };
+	let hwnd = unsafe { FindWindowW(CLASS, *TITLE) };
 	let swnd = unsafe { FindWindowExA(hwnd, HWND(0), s!("subWin"), PCSTR::null()) };
 	
 	let mut rect = RECT::default();
@@ -188,6 +213,6 @@ fn capture() -> DynamicImage {
 }
 
 fn terminate() {
-	let hwnd = unsafe { FindWindowW(CLASS, TITLE) };
+	let hwnd = unsafe { FindWindowW(CLASS, *TITLE) };
 	_ = unsafe { PostMessageA(hwnd, WM_CLOSE, WPARAM(0), LPARAM(0)) };
 }
