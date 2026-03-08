@@ -26,7 +26,11 @@ const TITLE_PREFIX: Lazy<&'static [u16]> = Lazy::new(|| {
 const QUICK: Lazy<bool> = Lazy::new(|| env::var("PLAYBRIDGE_QUICK").is_ok());
 const DEBUG: Lazy<bool> = Lazy::new(|| env::var("PLAYBRIDGE_DEBUG").is_ok());
 
-const CLASS: PCWSTR = w!("CROSVM_1"); // Note: Warning. May cause problems in the future.
+// Note: Warning. May cause problems in the future.
+const CLASS: PCWSTR = w!("CROSVM_1");
+const SUBTITLE: PCWSTR = w!("crosvm");
+const OUTERCLASS: PCWSTR = w!("HwndWrapper[DefaultDomain;;");
+
 const WIDTH: f32 = 1280.0;
 const HEIGHT: f32 = 720.0;
 const POLL: i32 = 1000 / 250;
@@ -231,6 +235,7 @@ fn get_target_window() -> HWND {
 		return hwnd
 	}
 
+    // Find old-design GPG window
 	loop {
 		hwnd = unsafe { FindWindowExW(HWND(0), hwnd, CLASS, PCWSTR::null()) };
 		if hwnd == HWND(0) { // Not found
@@ -250,5 +255,38 @@ fn get_target_window() -> HWND {
 			}
 		}
 	}
+
+	// Find new-design GPG window
+	loop {
+		hwnd = unsafe { FindWindowExW(HWND(0), hwnd, PCWSTR::null(), PCWSTR::null()) };
+		if hwnd == HWND(0) { // Not found
+			break
+		}
+
+		let mut buf = [0u16; 260]; // Long enough
+		unsafe { // check class first, outer window's is "HwndWrapper[DefaultDomain;;<GUID>]"
+			let len_class = RealGetWindowClassW(hwnd, &mut buf);
+			if len_class <= 0 {
+				continue
+			}
+			let class = &buf[..len_class as usize];
+			if class.starts_with(OUTERCLASS.as_wide()) {
+				let len_title = GetWindowTextW(hwnd, &mut buf);
+				if len_title <= 0 {
+					continue
+				}
+				let title = &buf[..len_title as usize];
+				if !title.starts_with(*TITLE_PREFIX) {
+					continue
+				}
+
+				let sub_hwnd = FindWindowExW(hwnd, HWND(0), CLASS, SUBTITLE);
+				if sub_hwnd != HWND(0) {
+					return sub_hwnd
+				}
+			}
+		}
+	}
+
 	HWND(0)
 }
