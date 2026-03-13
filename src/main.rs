@@ -76,17 +76,20 @@ fn main() {
 		println!("{}", HEIGHT as i32);
 	} else if command.contains("exec-out screencap -p") {
 		let image = capture();
+		if !image.is_none() {
+			let img = image.unwrap();
 
-		let mut stdout = stdout().lock();
-		image.write_with_encoder(PngEncoder::new(&mut stdout)).unwrap();
+			let mut stdout = stdout().lock();
+			img.write_with_encoder(PngEncoder::new(&mut stdout)).unwrap();
 
-		if *DEBUG {
-			let file = format!("playbridge_debug/{}.png", timestamp);
-			let path = std::path::Path::new(&file);
-			let parent = path.parent().unwrap();
+			if *DEBUG {
+				let file = format!("playbridge_debug/{}.png", timestamp);
+				let path = std::path::Path::new(&file);
+				let parent = path.parent().unwrap();
 
-			std::fs::create_dir_all(parent).unwrap();
-			image.save_with_format(path, image::ImageFormat::Png).unwrap();
+				std::fs::create_dir_all(parent).unwrap();
+				img.save_with_format(path, image::ImageFormat::Png).unwrap();
+			}
 		}
 	} else if command.contains("settings get secure android_id") {
 		// https://developer.android.com/reference/android/provider/Settings.Secure#ANDROID_ID
@@ -103,6 +106,7 @@ fn main() {
 
 fn get_gpg_info() -> (HWND, i32, i32) {
 	let hwnd = get_target_window();
+	if hwnd == HWND(0) { return (HWND(0), 0, 0) }
 
 	let mut client_rect = RECT::default();
 	_ = unsafe { GetClientRect(hwnd, &mut client_rect) };
@@ -119,6 +123,8 @@ fn get_relative_point(x: i32, y: i32, w: i32, h: i32) -> isize {
 
 fn input_tap(x: i32, y: i32) {
 	let (hwnd, w, h) = get_gpg_info();
+	if hwnd == HWND(0) { return }
+
 	let pos = get_relative_point(x, y, w, h);
 
 	unsafe {
@@ -129,6 +135,7 @@ fn input_tap(x: i32, y: i32) {
 
 fn input_swipe(x1: i32, y1: i32, x2: i32, y2: i32, dur: i32) {
 	let (hwnd, w, h) = get_gpg_info();
+	if hwnd == HWND(0) { return }
 
 	let time = (dur as f32 / POLL as f32).floor() as i32;
 	let speed = if *QUICK { 10 } else  { 1 };
@@ -160,6 +167,7 @@ fn input_swipe(x1: i32, y1: i32, x2: i32, y2: i32, dur: i32) {
 
 fn input_keyevent(keycode: i32) {
 	let hwnd = get_target_window();
+	if hwnd == HWND(0) { return }
 
 	let wparam = WPARAM(keycode as usize);
 	let down = LPARAM((keycode << 16) as isize);
@@ -171,15 +179,19 @@ fn input_keyevent(keycode: i32) {
 	}
 }
 
-fn capture() -> DynamicImage {
+fn capture() -> Option<DynamicImage> {
 	let hwnd = get_target_window();
+	if hwnd == HWND(0) { return None }
+
 	let swnd = unsafe { FindWindowExA(hwnd, HWND(0), s!("subWin"), PCSTR::null()) };
+	if swnd == HWND(0) { return None }
 	
 	let mut rect = RECT::default();
 	_ = unsafe { GetWindowRect(swnd, &mut rect) };
 
 	let width = rect.right - rect.left;
 	let height = rect.bottom - rect.top;
+	if width == 0 || height == 0 { return None }
 
 	let mut buffer = vec![0u8; (width * height) as usize * 4];
 	let mut info = BITMAPINFO {
@@ -204,13 +216,13 @@ fn capture() -> DynamicImage {
 		let cdc = CreateCompatibleDC(dc);
 		let cbmp = CreateCompatibleBitmap(dc, width, height);
 
-		SelectObject(cdc, cbmp);
+		let pbmp = SelectObject(cdc, cbmp);
 		_ = PrintWindow(hwnd, cdc, PRINT_WINDOW_FLAGS(PW_CLIENTONLY.0 | PW_RENDERFULLCONTENT));
 		GetDIBits(cdc, cbmp, 0, height as u32, Some(buffer.as_mut_ptr() as *mut _), &mut info, DIB_RGB_COLORS);
 		
+		SelectObject(cdc, pbmp); // Restore previous
 		_ = DeleteObject(cbmp);
 		ReleaseDC(hwnd, dc);
-		_ = DeleteDC(dc);
 		_ = DeleteDC(cdc);
 	}
 
@@ -221,11 +233,13 @@ fn capture() -> DynamicImage {
 	let image = RgbaImage::from_vec(width as u32, height as u32, rgba).unwrap();
 	let native = image::DynamicImage::ImageRgba8(image);
 	
-	native.resize_exact(WIDTH as u32, HEIGHT as u32, FilterType::Lanczos3)
+	Some(native.resize_exact(WIDTH as u32, HEIGHT as u32, FilterType::Lanczos3))
 }
 
 fn terminate() {
 	let hwnd = get_target_window();
+	if hwnd == HWND(0) { return }
+
 	_ = unsafe { PostMessageA(hwnd, WM_CLOSE, WPARAM(0), LPARAM(0)) };
 }
 
@@ -235,7 +249,7 @@ fn get_target_window() -> HWND {
 		return hwnd
 	}
 
-    // Find old-design GPG window
+	// Find old-design GPG window
 	loop {
 		hwnd = unsafe { FindWindowExW(HWND(0), hwnd, CLASS, PCWSTR::null()) };
 		if hwnd == HWND(0) { // Not found
