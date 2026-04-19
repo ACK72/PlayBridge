@@ -46,7 +46,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG_NAME }}
-          name: Release ${{ env.TAG_NAME }}
+          name: ${{ env.TAG_NAME }}
           # This automatically includes the commit changes/PRs in the release body
           generate_release_notes: true 
           # Upload the Windows executable as a downloadable asset
