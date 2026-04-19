@@ -10,7 +10,7 @@ Simple ADB emulator for Google Play Games, especially for Arknights & MAA
 ![setting](https://github.com/ACK72/PlayBridge/assets/25812442/69f980b6-7c9e-4a93-b1b5-f2a21c1b0680)
 
 - Change the settings in MAA as shown above.
-- Make an .cmd script with below code where MAA.exe exists. (If you don't want to run script each time, you can use setx to permanently set env variables.)
+- Make an .cmd script with below code where MAA.exe exists. Take care with character encoding. (If you don't want to run script each time, you can use setx to permanently set env variables.)
 
 ```
 set PLAYBRIDGE_TITLE=명일방주
