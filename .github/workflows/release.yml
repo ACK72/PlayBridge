@@ -1,0 +1,53 @@
+name: Build and Release Windows Executable
+
+on:
+  # This event makes the workflow triggerable manually by a project admin
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag (e.g. v0.3.3). If empty, version from Cargo.toml will be used.'
+        required: false
+        type: string
+
+jobs:
+  build-and-release:
+    name: Build & Release
+    runs-on: windows-latest
+    permissions:
+      contents: write # Important: Required for the action to create a GitHub Release
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Fetch all history so it can generate changelogs/commits diff since the previous release tag
+          fetch-depth: 0 
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          
+      - name: Build Executable
+        run: cargo build --release
+
+      - name: Determine Tag Name
+        id: set_tag
+        shell: bash
+        run: |
+          if [ -z "${{ inputs.version }}" ]; then
+            CARGO_VERSION=$(grep -m 1 '^version = ' Cargo.toml | awk -F'"' '{print $2}')
+            echo "TAG_NAME=v${CARGO_VERSION}" >> $GITHUB_ENV
+          else
+            echo "TAG_NAME=${{ inputs.version }}" >> $GITHUB_ENV
+          fi
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: Release ${{ env.TAG_NAME }}
+          # This automatically includes the commit changes/PRs in the release body
+          generate_release_notes: true 
+          # Upload the Windows executable as a downloadable asset
+          files: target/release/PlayBridge.exe
